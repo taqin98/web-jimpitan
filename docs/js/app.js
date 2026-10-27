@@ -3,7 +3,7 @@
  */
 
 import { callApi, getSavedAuth, saveAuth, clearAuth } from "./api.js";
-import { formatFullIndonesianDate, formatRupiah } from "./schedule.js";
+import { formatFullIndonesianDate, formatRupiah, projectScheduleMonth } from "./schedule.js";
 import { renderCalendar, formatMonthHeader } from "./calendar.js";
 import { renderInputList, collectInputValues } from "./input.js";
 
@@ -18,6 +18,8 @@ const state = {
   selectedDate: new Date().toISOString().substring(0, 10),
   bootstrap: null,
   dayDetail: null,
+  monthCache: {},
+  baseAnchor: null,
 };
 
 // UI Element Selectors
@@ -104,25 +106,167 @@ function switchScreen(screenName) {
 // Calendar & Home Logic
 // ==========================================
 
-async function loadCalendarBootstrap(ymStr) {
-  showLoading("Memuat data jadwal...");
+function getAdjacentYearMonth(ymStr, offset) {
+  const [year, month] = ymStr.split("-").map((v) => parseInt(v, 10));
+  const date = new Date(year, month - 1 + offset, 1);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
+
+async function prefetchAdjacentMonths(ymStr) {
+  const prevYm = getAdjacentYearMonth(ymStr, -1);
+  const nextYm = getAdjacentYearMonth(ymStr, 1);
+
+  [prevYm, nextYm].forEach((target) => {
+    if (!state.monthCache[target]) {
+      callApi("getBootstrap", { bulan: target })
+        .then((data) => {
+          state.monthCache[target] = data;
+        })
+        .catch(() => {});
+    }
+  });
+}
+
+function renderInstantDayCard(dateStr) {
+  const container = document.getElementById("day-detail-content");
+  if (!container || !state.bootstrap || !state.bootstrap.schedule) {
+    return;
+  }
+
+  const sched = state.bootstrap.schedule.find((s) => s.tanggal === dateStr);
+  const headerDate = document.getElementById("selected-date-title");
+  if (headerDate) {
+    headerDate.textContent = formatFullIndonesianDate(dateStr);
+  }
+
+  while (container.firstChild) {
+    container.removeChild(container.firstChild);
+  }
+
+  const rowPetugas = document.createElement("div");
+  rowPetugas.className = "detail-row";
+  const labelPetugas = document.createElement("span");
+  labelPetugas.className = "detail-label";
+  labelPetugas.textContent = "Petugas Malam Ini";
+  const valPetugas = document.createElement("span");
+  valPetugas.className = "detail-value";
+  valPetugas.textContent = sched ? sched.petugasAktual : "-";
+
+  if (sched && sched.ditukar) {
+    const swapBadge = document.createElement("span");
+    swapBadge.className = "badge badge-warning";
+    swapBadge.style.marginLeft = "8px";
+    swapBadge.textContent = "Tukar";
+    valPetugas.appendChild(swapBadge);
+  }
+  rowPetugas.appendChild(labelPetugas);
+  rowPetugas.appendChild(valPetugas);
+  container.appendChild(rowPetugas);
+
+  const isFuture = dateStr > state.today;
+  const isUserScheduled =
+    sched && String(sched.petugasJadwal).toUpperCase() === String(state.user).toUpperCase();
+
+  if (isFuture && isUserScheduled && !sched.ditukar) {
+    const btnSwap = document.createElement("button");
+    btnSwap.className = "btn btn-primary btn-sm btn-block";
+    btnSwap.style.marginTop = "10px";
+    btnSwap.textContent = "Ajukan Tukar Jadwal";
+    btnSwap.addEventListener("click", () => {
+      openSwapModal(dateStr);
+    });
+    container.appendChild(btnSwap);
+  }
+}
+
+function navigateMonth(targetYm) {
+  state.currentYm = targetYm;
+
+  // Set default selected date
+  if (state.today.startsWith(targetYm)) {
+    state.selectedDate = state.today;
+  } else {
+    state.selectedDate = `${targetYm}-01`;
+  }
+
+  // 1. Instant Switch: check cache or project immediately in 0ms!
+  if (state.monthCache[targetYm]) {
+    state.bootstrap.schedule = state.monthCache[targetYm].schedule;
+    state.bootstrap.pendingSwaps = state.monthCache[targetYm].pendingSwaps;
+  } else if (state.baseAnchor && state.bootstrap && state.bootstrap.houses) {
+    const projected = projectScheduleMonth(
+      targetYm,
+      state.baseAnchor.date,
+      state.baseAnchor.petugas,
+      state.bootstrap.houses,
+      state.today,
+      state.user,
+    );
+    state.bootstrap.schedule = projected;
+  }
+
+  // Instant UI render (0ms delay, no blocking overlay)
+  renderCalendarUI();
+  renderInstantDayCard(state.selectedDate);
+
+  // 2. Silent background sync to get server data & swaps without blocking the user
+  callApi("getBootstrap", { bulan: targetYm })
+    .then((data) => {
+      state.monthCache[targetYm] = data;
+      if (state.currentYm === targetYm) {
+        state.bootstrap.schedule = data.schedule;
+        state.bootstrap.pendingSwaps = data.pendingSwaps;
+        renderCalendarUI();
+      }
+    })
+    .catch(() => {});
+
+  // Fetch full day details quietly
+  loadSelectedDayDetail(state.selectedDate, false);
+
+  // Prefetch neighbors in the background
+  setTimeout(() => {
+    prefetchAdjacentMonths(targetYm);
+  }, 250);
+}
+
+async function loadCalendarBootstrap(ymStr, isInitial = false) {
+  if (isInitial) {
+    showLoading("Memuat data jadwal...");
+  }
   try {
     const data = await callApi("getBootstrap", { bulan: ymStr });
     state.bootstrap = data;
     state.today = data.today || state.today;
     state.currentYm = ymStr;
+    state.monthCache[ymStr] = data;
 
-    // Default selected date: today if in this month, else first day of month
+    if (data.schedule && data.schedule.length > 0) {
+      state.baseAnchor = {
+        date: data.schedule[0].tanggal,
+        petugas: data.schedule[0].petugasJadwal,
+      };
+    }
+
     if (!state.selectedDate || !state.selectedDate.startsWith(ymStr)) {
       state.selectedDate = data.today.startsWith(ymStr) ? data.today : `${ymStr}-01`;
     }
 
     renderCalendarUI();
-    await loadSelectedDayDetail(state.selectedDate);
+    renderInstantDayCard(state.selectedDate);
+    await loadSelectedDayDetail(state.selectedDate, false);
+
+    setTimeout(() => {
+      prefetchAdjacentMonths(ymStr);
+    }, 300);
   } catch (err) {
     showToast(err.message, "error");
   } finally {
-    hideLoading();
+    if (isInitial) {
+      hideLoading();
+    }
   }
 }
 
@@ -143,7 +287,8 @@ function renderCalendarUI() {
       async (clickedDate) => {
         state.selectedDate = clickedDate;
         renderCalendarUI();
-        await loadSelectedDayDetail(clickedDate);
+        renderInstantDayCard(clickedDate);
+        await loadSelectedDayDetail(clickedDate, false);
       },
     );
   }
@@ -228,13 +373,20 @@ function renderPendingSwaps() {
   });
 }
 
-async function loadSelectedDayDetail(dateStr) {
+async function loadSelectedDayDetail(dateStr, showSpinner = false) {
+  if (showSpinner) {
+    showLoading("Memuat detail...");
+  }
   try {
     const detail = await callApi("getDay", { tanggal: dateStr });
     state.dayDetail = detail;
     renderDayDetailCard();
   } catch (err) {
     showToast(err.message, "error");
+  } finally {
+    if (showSpinner) {
+      hideLoading();
+    }
   }
 }
 
@@ -706,7 +858,7 @@ function attachEventListeners() {
         } else {
           showToast(`Selamat datang, ${state.user}!`, "success");
           switchScreen("calendar");
-          await loadCalendarBootstrap(state.currentYm);
+          await loadCalendarBootstrap(state.currentYm, true);
         }
       } catch (err) {
         showToast(err.message, "error");
@@ -752,24 +904,20 @@ function attachEventListeners() {
     });
   }
 
-  // Month Navigation Buttons
+  // Month Navigation Buttons (Instant 0ms Transition)
   const btnPrevMonth = document.getElementById("btn-prev-month");
   if (btnPrevMonth) {
-    btnPrevMonth.addEventListener("click", async () => {
-      const [year, month] = state.currentYm.split("-").map((v) => parseInt(v, 10));
-      const prevDate = new Date(year, month - 2, 1);
-      const prevYm = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
-      await loadCalendarBootstrap(prevYm);
+    btnPrevMonth.addEventListener("click", () => {
+      const prevYm = getAdjacentYearMonth(state.currentYm, -1);
+      navigateMonth(prevYm);
     });
   }
 
   const btnNextMonth = document.getElementById("btn-next-month");
   if (btnNextMonth) {
-    btnNextMonth.addEventListener("click", async () => {
-      const [year, month] = state.currentYm.split("-").map((v) => parseInt(v, 10));
-      const nextDate = new Date(year, month, 1);
-      const nextYm = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`;
-      await loadCalendarBootstrap(nextYm);
+    btnNextMonth.addEventListener("click", () => {
+      const nextYm = getAdjacentYearMonth(state.currentYm, 1);
+      navigateMonth(nextYm);
     });
   }
 
@@ -963,7 +1111,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       switchScreen("changePassword");
     } else {
       switchScreen("calendar");
-      await loadCalendarBootstrap(state.currentYm);
+      await loadCalendarBootstrap(state.currentYm, true);
     }
   } else {
     switchScreen("login");

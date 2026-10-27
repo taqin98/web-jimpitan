@@ -107,3 +107,56 @@ export function addDays(dateStr, days) {
   const day = String(d.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
+
+export function diffDays(startDateStr, endDateStr) {
+  const d1 = parseDateString(startDateStr);
+  const d2 = parseDateString(endDateStr);
+  const diffTime = d2.getTime() - d1.getTime();
+  return Math.round(diffTime / (1000 * 60 * 60 * 24));
+}
+
+export function projectScheduleMonth(
+  yearMonthStr,
+  baseDateStr,
+  basePetugasNo,
+  activeHouses,
+  todayStr,
+  currentUser,
+) {
+  if (!activeHouses || activeHouses.length === 0 || !baseDateStr || !basePetugasNo) {
+    return [];
+  }
+
+  const baseIndex = activeHouses.findIndex(
+    (h) => h.no_rumah.toUpperCase() === basePetugasNo.toUpperCase(),
+  );
+  if (baseIndex === -1) {
+    return [];
+  }
+
+  const [year, month] = yearMonthStr.split("-").map((v) => parseInt(v, 10));
+  const totalDays = new Date(year, month, 0).getDate();
+  const schedule = [];
+
+  for (let day = 1; day <= totalDays; day += 1) {
+    const dayStr = String(day).padStart(2, "0");
+    const dateStr = `${yearMonthStr}-${dayStr}`;
+    const diff = diffDays(baseDateStr, dateStr);
+
+    const houseCount = activeHouses.length;
+    const currentIndex = (baseIndex + (diff % houseCount) + houseCount) % houseCount;
+    const scheduledPetugas = activeHouses[currentIndex].no_rumah;
+
+    schedule.push({
+      tanggal: dateStr,
+      petugasJadwal: scheduledPetugas,
+      petugasAktual: scheduledPetugas,
+      ditukar: false,
+      isToday: dateStr === todayStr,
+      isUserTurn:
+        Boolean(currentUser) && scheduledPetugas.toUpperCase() === currentUser.toUpperCase(),
+    });
+  }
+
+  return schedule;
+}
