@@ -87,6 +87,10 @@ function doPost(e) {
         resultData = adminResetPasswordAction(token, params.no);
         break;
 
+      case "adminSetJadwalBulan":
+        resultData = adminSetJadwalBulanAction(token, params.bulan, params.petugasAwal);
+        break;
+
       default:
         throw createAppError("NOT_FOUND", `Action '${action}' tidak dikenali.`);
     }
@@ -118,9 +122,12 @@ function setupInitialSheets() {
   });
 
   // Default settings
+  const todayYm = getTodayWib().substring(0, 7);
   const defaultSettings = [
     { kunci: "anchor_tanggal", nilai: getTodayWib() },
     { kunci: "anchor_petugas", nilai: "A6" },
+    { kunci: "bulan_rilis", nilai: todayYm },
+    { kunci: `jadwal_${todayYm}_petugas_1`, nilai: "A6" },
     { kunci: "nominal_per_hari", nilai: "1000" },
     { kunci: "nominal_minimum", nilai: "500" },
     { kunci: "nama_rt", nilai: "RT 09" },

@@ -3,7 +3,7 @@
  */
 
 import { callApi, getSavedAuth, saveAuth, clearAuth } from "./api.js";
-import { formatFullIndonesianDate, formatRupiah, projectScheduleMonth } from "./schedule.js";
+import { formatFullIndonesianDate, formatRupiah } from "./schedule.js";
 import { renderCalendar, formatMonthHeader } from "./calendar.js";
 import { renderInputList, collectInputValues } from "./input.js";
 
@@ -131,11 +131,10 @@ async function prefetchAdjacentMonths(ymStr) {
 
 function renderInstantDayCard(dateStr) {
   const container = document.getElementById("day-detail-content");
-  if (!container || !state.bootstrap || !state.bootstrap.schedule) {
+  if (!container) {
     return;
   }
 
-  const sched = state.bootstrap.schedule.find((s) => s.tanggal === dateStr);
   const headerDate = document.getElementById("selected-date-title");
   if (headerDate) {
     headerDate.textContent = formatFullIndonesianDate(dateStr);
@@ -144,6 +143,33 @@ function renderInstantDayCard(dateStr) {
   while (container.firstChild) {
     container.removeChild(container.firstChild);
   }
+
+  if (state.bootstrap && state.bootstrap.isReleased === false) {
+    const unreleasedNotice = document.createElement("div");
+    unreleasedNotice.style.padding = "12px";
+    unreleasedNotice.style.textAlign = "center";
+    unreleasedNotice.style.color = "var(--text-muted)";
+    unreleasedNotice.style.fontSize = "14px";
+    unreleasedNotice.textContent = "Jadwal bulan ini belum diset oleh Admin.";
+    container.appendChild(unreleasedNotice);
+
+    if (state.role === "admin") {
+      const btnSetBulan = document.createElement("button");
+      btnSetBulan.className = "btn btn-primary btn-sm btn-block";
+      btnSetBulan.style.marginTop = "8px";
+      btnSetBulan.textContent = "Set Jadwal Bulan Ini";
+      btnSetBulan.addEventListener("click", () => {
+        openSetJadwalModal(state.currentYm);
+      });
+      container.appendChild(btnSetBulan);
+    }
+    return;
+  }
+
+  const sched =
+    state.bootstrap && state.bootstrap.schedule
+      ? state.bootstrap.schedule.find((s) => s.tanggal === dateStr)
+      : null;
 
   const rowPetugas = document.createElement("div");
   rowPetugas.className = "detail-row";
@@ -191,34 +217,29 @@ function navigateMonth(targetYm) {
     state.selectedDate = `${targetYm}-01`;
   }
 
-  // 1. Instant Switch: check cache or project immediately in 0ms!
   if (state.monthCache[targetYm]) {
-    state.bootstrap.schedule = state.monthCache[targetYm].schedule;
-    state.bootstrap.pendingSwaps = state.monthCache[targetYm].pendingSwaps;
-  } else if (state.baseAnchor && state.bootstrap && state.bootstrap.houses) {
-    const projected = projectScheduleMonth(
-      targetYm,
-      state.baseAnchor.date,
-      state.baseAnchor.petugas,
-      state.bootstrap.houses,
-      state.today,
-      state.user,
-    );
-    state.bootstrap.schedule = projected;
+    state.bootstrap.schedule = state.monthCache[targetYm].schedule || [];
+    state.bootstrap.isReleased = state.monthCache[targetYm].isReleased !== false;
+    state.bootstrap.pendingSwaps = state.monthCache[targetYm].pendingSwaps || [];
+  } else {
+    state.bootstrap.schedule = [];
+    state.bootstrap.isReleased = false;
+    state.bootstrap.pendingSwaps = [];
   }
 
   // Instant UI render (0ms delay, no blocking overlay)
   renderCalendarUI();
   renderInstantDayCard(state.selectedDate);
 
-  // 2. Silent background sync to get server data & swaps without blocking the user
   callApi("getBootstrap", { bulan: targetYm })
     .then((data) => {
       state.monthCache[targetYm] = data;
       if (state.currentYm === targetYm) {
-        state.bootstrap.schedule = data.schedule;
-        state.bootstrap.pendingSwaps = data.pendingSwaps;
+        state.bootstrap.schedule = data.schedule || [];
+        state.bootstrap.isReleased = data.isReleased !== false;
+        state.bootstrap.pendingSwaps = data.pendingSwaps || [];
         renderCalendarUI();
+        renderInstantDayCard(state.selectedDate);
       }
     })
     .catch(() => {});
@@ -401,6 +422,29 @@ function renderDayDetailCard() {
 
   const d = state.dayDetail;
 
+  if (state.bootstrap && state.bootstrap.isReleased === false) {
+    const unreleasedNotice = document.createElement("div");
+    unreleasedNotice.style.padding = "12px";
+    unreleasedNotice.style.textAlign = "center";
+    unreleasedNotice.style.color = "var(--text-muted)";
+    unreleasedNotice.style.fontSize = "14px";
+    unreleasedNotice.textContent = "Jadwal untuk bulan ini belum diset oleh Admin.";
+    container.appendChild(unreleasedNotice);
+
+    if (state.role === "admin") {
+      const btnSetBulan = document.createElement("button");
+      btnSetBulan.className = "btn btn-primary btn-sm btn-block";
+      btnSetBulan.style.marginTop = "8px";
+      btnSetBulan.textContent = "Set Jadwal Bulan Ini";
+      btnSetBulan.addEventListener("click", () => {
+        openSetJadwalModal(state.currentYm);
+      });
+      container.appendChild(btnSetBulan);
+    }
+    updateStartButtonState();
+    return;
+  }
+
   // Header date label
   const headerDate = document.getElementById("selected-date-title");
   if (headerDate) {
@@ -531,6 +575,15 @@ function updateStartButtonState() {
     return;
   }
 
+  if (state.bootstrap && state.bootstrap.isReleased === false) {
+    btnStart.disabled = true;
+    btnStart.textContent = "Mulai Jimpitan Malam Ini";
+    if (turnLabel) {
+      turnLabel.textContent = "Jadwal bulan ini belum diset oleh Admin";
+    }
+    return;
+  }
+
   // Find today's scheduled or actual petugas
   let todayPetugas = "-";
   if (state.bootstrap && state.bootstrap.schedule) {
@@ -555,6 +608,49 @@ function updateStartButtonState() {
     if (turnLabel) {
       turnLabel.textContent = `Giliran malam ini: ${todayPetugas}`;
     }
+  }
+}
+
+function openSetJadwalModal(ymStr) {
+  const modal = document.getElementById("modal-set-jadwal-bulan");
+  const monthDisplay = document.getElementById("set-jadwal-bulan-display");
+  const selectPetugas = document.getElementById("set-jadwal-petugas-awal");
+
+  if (monthDisplay) {
+    monthDisplay.value = formatMonthHeader(ymStr);
+  }
+
+  if (selectPetugas && state.bootstrap && state.bootstrap.houses) {
+    while (selectPetugas.firstChild) {
+      selectPetugas.removeChild(selectPetugas.firstChild);
+    }
+
+    const defaultOpt = document.createElement("option");
+    defaultOpt.value = "";
+    defaultOpt.textContent = "-- Pilih Petugas Tanggal 1 --";
+    selectPetugas.appendChild(defaultOpt);
+
+    state.bootstrap.houses.forEach((h) => {
+      const opt = document.createElement("option");
+      opt.value = h.no_rumah;
+      opt.textContent = `${h.no_rumah} (${h.nama || "Warga"})`;
+      selectPetugas.appendChild(opt);
+    });
+
+    if (state.bootstrap.houses.length > 0) {
+      selectPetugas.value = state.bootstrap.houses[0].no_rumah;
+    }
+  }
+
+  if (modal) {
+    modal.classList.add("active");
+  }
+}
+
+function closeSetJadwalModal() {
+  const modal = document.getElementById("modal-set-jadwal-bulan");
+  if (modal) {
+    modal.classList.remove("active");
   }
 }
 
@@ -1028,6 +1124,42 @@ function attachEventListeners() {
   const btnCloseSwap = document.getElementById("btn-close-swap-modal");
   if (btnCloseSwap) {
     btnCloseSwap.addEventListener("click", closeSwapModal);
+  }
+
+  // Set Jadwal Bulan Form (Admin)
+  const formSetJadwal = document.getElementById("form-set-jadwal-bulan");
+  if (formSetJadwal) {
+    formSetJadwal.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const selectPetugas = document.getElementById("set-jadwal-petugas-awal");
+      const petugasAwal = selectPetugas ? selectPetugas.value : "";
+
+      if (!petugasAwal) {
+        showToast("Pilih petugas tanggal 1.", "error");
+        return;
+      }
+
+      showLoading("Menyimpan jadwal bulan...");
+      try {
+        const res = await callApi("adminSetJadwalBulan", {
+          bulan: state.currentYm,
+          petugasAwal,
+        });
+        showToast(res.message || "Jadwal bulan berhasil diset!", "success");
+        closeSetJadwalModal();
+        delete state.monthCache[state.currentYm];
+        await loadCalendarBootstrap(state.currentYm, true);
+      } catch (err) {
+        showToast(err.message, "error");
+      } finally {
+        hideLoading();
+      }
+    });
+  }
+
+  const btnCloseSetJadwal = document.getElementById("btn-close-set-jadwal-modal");
+  if (btnCloseSetJadwal) {
+    btnCloseSetJadwal.addEventListener("click", closeSetJadwalModal);
   }
 
   // Admin Navigation

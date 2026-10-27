@@ -115,20 +115,19 @@ export function diffDays(startDateStr, endDateStr) {
   return Math.round(diffTime / (1000 * 60 * 60 * 24));
 }
 
-export function projectScheduleMonth(
+export function generateMonthlySchedule(
   yearMonthStr,
-  baseDateStr,
-  basePetugasNo,
+  firstPetugasNo,
   activeHouses,
   todayStr,
   currentUser,
 ) {
-  if (!activeHouses || activeHouses.length === 0 || !baseDateStr || !basePetugasNo) {
+  if (!activeHouses || activeHouses.length === 0 || !firstPetugasNo) {
     return [];
   }
 
   const baseIndex = activeHouses.findIndex(
-    (h) => h.no_rumah.toUpperCase() === basePetugasNo.toUpperCase(),
+    (h) => h.no_rumah.toUpperCase() === firstPetugasNo.toUpperCase(),
   );
   if (baseIndex === -1) {
     return [];
@@ -141,11 +140,8 @@ export function projectScheduleMonth(
   for (let day = 1; day <= totalDays; day += 1) {
     const dayStr = String(day).padStart(2, "0");
     const dateStr = `${yearMonthStr}-${dayStr}`;
-    const diff = diffDays(baseDateStr, dateStr);
-
-    const houseCount = activeHouses.length;
-    const currentIndex = (baseIndex + (diff % houseCount) + houseCount) % houseCount;
-    const scheduledPetugas = activeHouses[currentIndex].no_rumah;
+    const houseIndex = (baseIndex + (day - 1)) % activeHouses.length;
+    const scheduledPetugas = activeHouses[houseIndex].no_rumah;
 
     schedule.push({
       tanggal: dateStr,

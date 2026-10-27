@@ -58,137 +58,182 @@ function getPetugasAktualFromSwaps(targetDate, scheduledPetugas, approvedSwaps) 
   };
 }
 
-function buildScheduleMap(startDateStr, endDateStr) {
+function getReleasedMonths() {
+  const releasedStr = getSetting("bulan_rilis", "");
+  if (!releasedStr) {
+    const today = getTodayWib();
+    const currentYm = today.substring(0, 7);
+    return [currentYm];
+  }
+  return releasedStr
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => Boolean(s));
+}
+
+function isMonthReleased(yearMonthStr) {
+  const list = getReleasedMonths();
+  return list.includes(yearMonthStr);
+}
+
+function adminSetJadwalBulanAction(token, yearMonthStr, petugasAwalNo) {
+  const auth = verifyToken(token);
+  if (auth.role !== "admin") {
+    throw createAppError("FORBIDDEN", "Hanya admin yang dapat menyetel jadwal bulanan.");
+  }
+
+  if (!yearMonthStr || !/^\d{4}-\d{2}$/.test(yearMonthStr)) {
+    throw createAppError("VALIDATION", "Format bulan harus yyyy-MM (contoh: 2026-11).");
+  }
+
   const activeHouses = getActiveWargaHouses();
   if (activeHouses.length === 0) {
-    return {};
+    throw createAppError("NOT_FOUND", "Tidak ada rumah warga yang aktif.");
   }
+
+  let startingPetugas = petugasAwalNo ? String(petugasAwalNo).trim().toUpperCase() : "";
+
+  // Auto-calculate from previous month if not explicitly specified
+  if (!startingPetugas) {
+    const [year, month] = yearMonthStr.split("-").map((v) => parseInt(v, 10));
+    const prevDate = new Date(Date.UTC(year, month - 2, 1, 12, 0, 0));
+    const prevYm = Utilities.formatDate(prevDate, "UTC", "yyyy-MM");
+    const prevPetugasAwal = getSetting(`jadwal_${prevYm}_petugas_1`, "");
+
+    if (prevPetugasAwal) {
+      const prevTotalDays = new Date(year, month - 1, 0).getDate();
+      const prevStartIndex = activeHouses.findIndex(
+        (h) => h.no_rumah.toUpperCase() === prevPetugasAwal.toUpperCase(),
+      );
+      if (prevStartIndex !== -1) {
+        const nextIdx = (prevStartIndex + prevTotalDays) % activeHouses.length;
+        startingPetugas = activeHouses[nextIdx].no_rumah;
+      }
+    }
+
+    if (!startingPetugas) {
+      startingPetugas = getSetting("anchor_petugas", activeHouses[0].no_rumah);
+    }
+  }
+
+  const houseFound = activeHouses.some(
+    (h) => h.no_rumah.toUpperCase() === startingPetugas.toUpperCase(),
+  );
+  if (!houseFound) {
+    throw createAppError(
+      "VALIDATION",
+      `Rumah ${startingPetugas} tidak ditemukan dalam daftar warga aktif.`,
+    );
+  }
+
+  setSetting(`jadwal_${yearMonthStr}_petugas_1`, startingPetugas);
+
+  const releasedList = getReleasedMonths();
+  if (!releasedList.includes(yearMonthStr)) {
+    releasedList.push(yearMonthStr);
+    setSetting("bulan_rilis", releasedList.join(","));
+  }
+
+  return {
+    ok: true,
+    bulan: yearMonthStr,
+    petugasAwal: startingPetugas,
+    message: `Jadwal bulan ${yearMonthStr} berhasil diset dengan petugas awal ${startingPetugas}.`,
+  };
+}
+
+function buildScheduleForMonth(yearMonthStr) {
+  if (!isMonthReleased(yearMonthStr)) {
+    return null;
+  }
+
+  const activeHouses = getActiveWargaHouses();
+  if (activeHouses.length === 0) {
+    return [];
+  }
+
+  const [year, month] = yearMonthStr.split("-").map((v) => parseInt(v, 10));
+  const totalDays = new Date(year, month, 0).getDate();
+
+  let startingPetugas = getSetting(`jadwal_${yearMonthStr}_petugas_1`, "");
+  if (!startingPetugas) {
+    startingPetugas = getSetting("anchor_petugas", activeHouses[0].no_rumah);
+  }
+
+  const startIndex = activeHouses.findIndex(
+    (h) => h.no_rumah.toUpperCase() === startingPetugas.toUpperCase(),
+  );
+  const baseIdx = startIndex === -1 ? 0 : startIndex;
 
   const jimpitanRecords = readSheetAsObjects(SHEET_NAMES.JIMPITAN);
   const approvedSwaps = getApprovedSwaps();
 
-  // Create lookup for existing Jimpitan rows
   const jimpitanByDate = {};
   jimpitanRecords.forEach((r) => {
-    if (r.tanggal) {
+    if (r.tanggal && r.tanggal.startsWith(yearMonthStr)) {
       jimpitanByDate[r.tanggal] = r;
     }
   });
 
-  // Find base anchor or latest record before startDateStr
-  const anchorTanggal = getSetting("anchor_tanggal", getTodayWib());
-  const anchorPetugas = getSetting("anchor_petugas", activeHouses[0].no_rumah);
+  const today = getTodayWib();
+  const scheduleList = [];
 
-  // Find the closest recorded date before or at startDateStr
-  const recordedDates = Object.keys(jimpitanByDate).sort();
-  let baseDate = anchorTanggal;
-  let basePetugas = anchorPetugas;
+  for (let day = 1; day <= totalDays; day += 1) {
+    const dayStr = String(day).padStart(2, "0");
+    const dateStr = `${yearMonthStr}-${dayStr}`;
 
-  for (let i = recordedDates.length - 1; i >= 0; i -= 1) {
-    const d = recordedDates[i];
-    if (d <= startDateStr) {
-      baseDate = d;
-      basePetugas = jimpitanByDate[d].petugas_jadwal;
-      break;
-    }
-  }
-
-  // If baseDate is after startDateStr, step backwards or use baseDate
-  // In practice we step forward from min(baseDate, startDateStr) to endDateStr
-  const scheduleMap = {};
-  let iterDate = baseDate;
-  let iterPetugas = basePetugas;
-
-  // If baseDate is after startDateStr, step backward
-  if (diffDays(startDateStr, iterDate) > 0) {
-    // Walk back
-    const daysBack = diffDays(startDateStr, iterDate);
-    for (let b = 0; b < daysBack; b += 1) {
-      const prevDate = addDays(iterDate, -1);
-      // find previous petugas
-      const currIdx = activeHouses.findIndex(
-        (h) => h.no_rumah.toUpperCase() === iterPetugas.toUpperCase(),
-      );
-      const prevIdx = currIdx <= 0 ? activeHouses.length - 1 : currIdx - 1;
-      iterPetugas = activeHouses[prevIdx].no_rumah;
-      iterDate = prevDate;
-    }
-  }
-
-  // Walk forward up to endDateStr
-  while (iterDate <= endDateStr) {
     let scheduledPetugas;
-    if (jimpitanByDate[iterDate]) {
-      scheduledPetugas = jimpitanByDate[iterDate].petugas_jadwal;
+    if (jimpitanByDate[dateStr]) {
+      scheduledPetugas = jimpitanByDate[dateStr].petugas_jadwal;
     } else {
-      scheduledPetugas = iterPetugas;
+      const houseIndex = (baseIdx + (day - 1)) % activeHouses.length;
+      scheduledPetugas = activeHouses[houseIndex].no_rumah;
     }
 
-    const swapResult = getPetugasAktualFromSwaps(iterDate, scheduledPetugas, approvedSwaps);
+    const swapResult = getPetugasAktualFromSwaps(dateStr, scheduledPetugas, approvedSwaps);
 
-    if (iterDate >= startDateStr && iterDate <= endDateStr) {
-      scheduleMap[iterDate] = {
-        tanggal: iterDate,
-        petugasJadwal: scheduledPetugas,
-        petugasAktual: swapResult.aktual,
-        ditukar: swapResult.ditukar,
-        swapInfo: swapResult.swapInfo,
-      };
-    }
-
-    iterPetugas = nextPetugas(activeHouses, scheduledPetugas);
-    iterDate = addDays(iterDate, 1);
+    scheduleList.push({
+      tanggal: dateStr,
+      petugasJadwal: scheduledPetugas,
+      petugasAktual: swapResult.aktual,
+      ditukar: swapResult.ditukar,
+      swapInfo: swapResult.swapInfo,
+      isToday: dateStr === today,
+    });
   }
 
-  return scheduleMap;
+  return scheduleList;
 }
 
 function getPetugasForDate(targetDate) {
-  const scheduleMap = buildScheduleMap(targetDate, addDays(targetDate, 1));
-  return scheduleMap[targetDate];
+  const ym = targetDate.substring(0, 7);
+  const scheduleList = buildScheduleForMonth(ym);
+  if (!scheduleList) {
+    return null;
+  }
+  return scheduleList.find((s) => s.tanggal === targetDate) || null;
 }
 
 function getBootstrapData(token, yearMonthStr) {
   const auth = verifyToken(token);
   const today = getTodayWib();
-
-  // If yearMonthStr is not provided, use today's month
   const targetYm = yearMonthStr || today.substring(0, 7);
-  const [year, month] = targetYm.split("-").map((v) => parseInt(v, 10));
-
-  // Determine first day and last day of month
-  const startDateStr = `${targetYm}-01`;
-  const lastDayInt = new Date(year, month, 0).getDate();
-  const endDateStr = `${targetYm}-${String(lastDayInt).padStart(2, "0")}`;
 
   const activeHouses = getActiveWargaHouses().map((h) => ({
     no_rumah: h.no_rumah,
     nama: h.nama,
   }));
 
-  const scheduleMap = buildScheduleMap(startDateStr, endDateStr);
-  const scheduleList = [];
+  const scheduleList = buildScheduleForMonth(targetYm);
+  const isReleased = Boolean(scheduleList);
 
-  for (let day = 1; day <= lastDayInt; day += 1) {
-    const dateStr = `${targetYm}-${String(day).padStart(2, "0")}`;
-    const info = scheduleMap[dateStr] || {
-      tanggal: dateStr,
-      petugasJadwal: "",
-      petugasAktual: "",
-      ditukar: false,
-    };
+  const scheduleWithUserTurn = isReleased
+    ? scheduleList.map((item) => ({
+        ...item,
+        isUserTurn: String(item.petugasAktual).toUpperCase() === auth.user.toUpperCase(),
+      }))
+    : [];
 
-    scheduleList.push({
-      tanggal: dateStr,
-      petugasJadwal: info.petugasJadwal,
-      petugasAktual: info.petugasAktual,
-      ditukar: info.ditukar,
-      isToday: dateStr === today,
-      isUserTurn: String(info.petugasAktual).toUpperCase() === auth.user.toUpperCase(),
-    });
-  }
-
-  // Get pending swaps relevant to this user
   const allSwaps = readSheetAsObjects(SHEET_NAMES.TUKAR);
   const pendingSwaps = allSwaps
     .filter(
@@ -213,7 +258,8 @@ function getBootstrapData(token, yearMonthStr) {
     user: auth.user,
     role: auth.role,
     houses: activeHouses,
-    schedule: scheduleList,
+    schedule: scheduleWithUserTurn,
+    isReleased,
     pendingSwaps,
   };
 }
@@ -222,11 +268,26 @@ function getDayDetail(token, targetDate) {
   verifyToken(token);
   const today = getTodayWib();
   const dateStr = targetDate || today;
-  const nextDateStr = addDays(dateStr, 1);
+  const ym = dateStr.substring(0, 7);
 
-  const scheduleMap = buildScheduleMap(dateStr, nextDateStr);
-  const dayInfo = scheduleMap[dateStr];
-  const nextDayInfo = scheduleMap[nextDateStr];
+  const isReleased = isMonthReleased(ym);
+  if (!isReleased) {
+    return {
+      tanggal: dateStr,
+      isReleased: false,
+      petugasJadwal: "",
+      petugasAktual: "",
+      ditukar: false,
+      petugasBerikutnya: "",
+      titipanBerakhir: [],
+      sudahInput: false,
+      rekapRingkas: null,
+    };
+  }
+
+  const dayInfo = getPetugasForDate(dateStr);
+  const nextDateStr = addDays(dateStr, 1);
+  const nextDayInfo = getPetugasForDate(nextDateStr);
 
   // Check ending titipan on this date
   const setoranList = readSheetAsObjects(SHEET_NAMES.SETORAN);
@@ -299,36 +360,41 @@ function requestSwapAction(token, tanggal1, mitra) {
     );
   }
 
-  // Search partner's nearest scheduled date after tanggal1 within 150 days
-  const maxSearchDays = 150;
-  const searchEndDate = addDays(tanggal1, maxSearchDays);
-  const futureScheduleMap = buildScheduleMap(addDays(tanggal1, 1), searchEndDate);
-
+  // Search partner's nearest scheduled date after tanggal1 in released months
   let tanggal2 = null;
-  const datesToInspect = Object.keys(futureScheduleMap).sort();
+  const releasedMonths = getReleasedMonths().sort();
+  const currentYm = tanggal1.substring(0, 7);
 
-  for (let i = 0; i < datesToInspect.length; i += 1) {
-    const candidateDate = datesToInspect[i];
-    const sched = futureScheduleMap[candidateDate];
+  for (let m = 0; m < releasedMonths.length; m += 1) {
+    const ym = releasedMonths[m];
+    if (ym < currentYm) {
+      continue;
+    }
 
-    if (sched.petugasJadwal.toUpperCase() === normalizedMitra) {
-      // Check if candidateDate is already in an active swap
-      const candidateSwap = allSwaps.find(
-        (s) =>
-          (s.status === "PENDING" || s.status === "DISETUJUI") &&
-          (s.tanggal1 === candidateDate || s.tanggal2 === candidateDate),
-      );
-      if (!candidateSwap) {
-        tanggal2 = candidateDate;
-        break;
+    const monthSchedule = buildScheduleForMonth(ym) || [];
+    for (let i = 0; i < monthSchedule.length; i += 1) {
+      const item = monthSchedule[i];
+      if (item.tanggal > tanggal1 && item.petugasJadwal.toUpperCase() === normalizedMitra) {
+        const candidateSwap = allSwaps.find(
+          (s) =>
+            (s.status === "PENDING" || s.status === "DISETUJUI") &&
+            (s.tanggal1 === item.tanggal || s.tanggal2 === item.tanggal),
+        );
+        if (!candidateSwap) {
+          tanggal2 = item.tanggal;
+          break;
+        }
       }
+    }
+    if (tanggal2) {
+      break;
     }
   }
 
   if (!tanggal2) {
     throw createAppError(
       "NOT_FOUND",
-      `Tidak ditemukan giliran ${normalizedMitra} yang tersedia dalam 150 hari ke depan.`,
+      `Tidak ditemukan giliran ${normalizedMitra} yang tersedia pada bulan yang sudah diset oleh Admin.`,
     );
   }
 

@@ -330,6 +330,32 @@
       </div>
     </div>
 
+    <!-- MODAL: ADMIN SET JADWAL BULAN -->
+    <div id="modal-set-jadwal-bulan" class="modal-overlay">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">Set Jadwal Bulanan</div>
+          <button id="btn-close-set-jadwal-modal" class="btn btn-secondary btn-sm" type="button">
+            &times;
+          </button>
+        </div>
+        <form id="form-set-jadwal-bulan">
+          <div class="form-group">
+            <label for="set-jadwal-bulan-display" class="form-label">Bulan</label>
+            <input id="set-jadwal-bulan-display" type="text" class="form-input" readonly />
+          </div>
+          <div class="form-group">
+            <label for="set-jadwal-petugas-awal" class="form-label">Petugas Tanggal 1</label>
+            <select id="set-jadwal-petugas-awal" class="form-input" required></select>
+          </div>
+          <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px">
+            Rotasi akan bergulir otomatis per malam dimulai dari nomor rumah ini hingga akhir bulan.
+          </p>
+          <button type="submit" class="btn btn-primary btn-block">Rilis & Aktifkan Jadwal</button>
+        </form>
+      </div>
+    </div>
+
     <!-- TOAST CONTAINER -->
     <div id="toast-container" class="toast-container"></div>
 
