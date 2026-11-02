@@ -61,9 +61,7 @@ function getPetugasAktualFromSwaps(targetDate, scheduledPetugas, approvedSwaps) 
 function getReleasedMonths() {
   const releasedStr = getSetting("bulan_rilis", "");
   if (!releasedStr) {
-    const today = getTodayWib();
-    const currentYm = today.substring(0, 7);
-    return [currentYm];
+    return [];
   }
   return releasedStr
     .split(",")

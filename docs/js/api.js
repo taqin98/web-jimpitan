@@ -7,6 +7,7 @@ import { CONFIG } from "./config.js";
 
 const TOKEN_KEY = "jimpitan_auth_token";
 const USER_KEY = "jimpitan_user_data";
+const MOCK_DATABASE_KEY = "jimpitan_mock_db";
 
 export function getSavedAuth() {
   const token = localStorage.getItem(TOKEN_KEY);
@@ -40,11 +41,12 @@ export function clearAuth() {
 
 // Local mock data store for previewing when API_URL is empty
 function getMockDatabase() {
-  const MOCK_KEY = "jimpitan_mock_db";
-  const stored = localStorage.getItem(MOCK_KEY);
+  const stored = localStorage.getItem(MOCK_DATABASE_KEY);
   if (stored) {
     try {
-      return JSON.parse(stored);
+      const database = JSON.parse(stored);
+      database.monthlySchedules = database.monthlySchedules || {};
+      return database;
     } catch {
       // Fallback to fresh mock
     }
@@ -70,10 +72,15 @@ function getMockDatabase() {
     setoran: [],
     anchorDate: "2026-10-01",
     anchorPetugas: "A6",
+    monthlySchedules: {},
   };
 
-  localStorage.setItem(MOCK_KEY, JSON.stringify(initialMock));
+  saveMockDatabase(initialMock);
   return initialMock;
+}
+
+function saveMockDatabase(database) {
+  localStorage.setItem(MOCK_DATABASE_KEY, JSON.stringify(database));
 }
 
 function handleMockApi(action, token, params) {
@@ -110,20 +117,52 @@ function handleMockApi(action, token, params) {
     };
   }
 
-  // Simulated rotation for bootstrap
+  if (action === "adminSetJadwalBulan") {
+    if (token !== "mock-token-admin") {
+      const err = new Error("Hanya admin yang dapat menyetel jadwal bulanan.");
+      err.code = "FORBIDDEN";
+      throw err;
+    }
+
+    const yearMonth = String(params.bulan || "");
+    const startingPetugas = String(params.petugasAwal || "")
+      .trim()
+      .toUpperCase();
+    const activeHouses = db.houses.filter((house) => house.aktif);
+    const houseExists = activeHouses.some((house) => house.no_rumah === startingPetugas);
+
+    if (!/^\d{4}-\d{2}$/.test(yearMonth) || !houseExists) {
+      const err = new Error("Bulan dan petugas awal wajib valid.");
+      err.code = "VALIDATION";
+      throw err;
+    }
+
+    db.monthlySchedules[yearMonth] = startingPetugas;
+    saveMockDatabase(db);
+
+    return {
+      ok: true,
+      bulan: yearMonth,
+      petugasAwal: startingPetugas,
+      message: `Jadwal bulan ${yearMonth} berhasil diset dengan petugas awal ${startingPetugas}.`,
+    };
+  }
+
   if (action === "getBootstrap") {
     const ym = params.bulan || today.substring(0, 7);
     const [year, month] = ym.split("-").map((v) => parseInt(v, 10));
     const lastDay = new Date(year, month, 0).getDate();
     const activeHouses = db.houses.filter((h) => h.aktif);
+    const startingPetugas = db.monthlySchedules[ym];
+    const startingIndex = activeHouses.findIndex((house) => house.no_rumah === startingPetugas);
+    const isReleased = startingIndex !== -1;
 
     const schedule = [];
-    let pIdx = 0;
 
-    for (let d = 1; d <= lastDay; d += 1) {
+    for (let d = 1; isReleased && d <= lastDay; d += 1) {
       const dateStr = `${ym}-${String(d).padStart(2, "0")}`;
-      const petugasJadwal = activeHouses[pIdx % activeHouses.length].no_rumah;
-      pIdx += 1;
+      const houseIndex = (startingIndex + d - 1) % activeHouses.length;
+      const petugasJadwal = activeHouses[houseIndex].no_rumah;
 
       // check swaps
       const swap = db.swaps.find(
@@ -156,6 +195,7 @@ function handleMockApi(action, token, params) {
         nama: h.nama,
       })),
       schedule,
+      isReleased,
       pendingSwaps: db.swaps.filter((s) => s.status === "PENDING"),
     };
   }

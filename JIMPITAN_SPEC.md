@@ -95,10 +95,12 @@ Contoh: master berisi A6, A7, ... A35 (A1 sampai A5 tidak dimasukkan). Jika A35 
 
 Jika di kemudian hari sebuah rumah menjadi kosong atau pindah, admin cukup mengubah `aktif` menjadi `FALSE` (jangan menghapus baris, agar penunjuk rotasi dan histori tetap utuh). Rumah baru ditambahkan sebagai baris baru; letak barisnya menentukan posisi di rotasi. Jika petugas terakhir yang tersimpan ternyata sudah nonaktif, lanjutkan ke rumah aktif berikutnya menurut urutan barisnya.
 
-Menentukan petugas (dijadwalkan) pada tanggal `D`:
+Admin membuat jadwal secara terpisah untuk setiap bulan dengan memilih petugas tanggal 1. Sistem tidak memproyeksikan jadwal ke bulan atau tahun yang belum dirilis admin.
+
+Menentukan petugas (dijadwalkan) pada tanggal `D` untuk bulan yang sudah dirilis:
 
 1. Jika ada baris `Jimpitan` untuk `D`, pakai `petugas_jadwal` yang tersimpan (histori **tidak** berubah walau master data berubah nanti).
-2. Jika tidak, mulai dari baris `Jimpitan` terakhir sebelum `D` (atau dari `anchor` di `Pengaturan` bila belum ada baris), lalu maju satu hari demi satu hari dengan `nextPetugas` sampai `D`.
+2. Jika tidak, mulai dari petugas tanggal 1 yang dipilih admin, lalu maju satu hari demi satu hari dengan `nextPetugas` sampai `D`.
 3. Petugas aktual pada `D`: jika ada tukar berstatus `DISETUJUI` yang mengubah `D`, pakai petugas pengganti; selain itu sama dengan petugas dijadwalkan.
 
 Rotasi maju berdasarkan **tanggal kalender**, termasuk malam yang tidak dicatat.
@@ -138,7 +140,7 @@ Satu spreadsheet, satu sheet per tabel. Baris 1 adalah header (nama kolom persis
 | wajib_ganti_password | TRUE     | TRUE sampai pengguna mengganti password awal                                                 |
 
 **Pengaturan** (pasangan `kunci` dan `nilai`)
-`anchor_tanggal`, `anchor_petugas`, `nominal_per_hari` (1000), `nominal_minimum` (500), `nama_rt`.
+`anchor_tanggal`, `anchor_petugas`, `bulan_rilis` (daftar `yyyy-MM`), `jadwal_<yyyy-MM>_petugas_1`, `nominal_per_hari` (1000), `nominal_minimum` (500), `nama_rt`.
 
 **Jimpitan** (satu baris per malam yang sudah disimpan)
 `tanggal`, `petugas_jadwal`, `petugas_aktual`, `total`, `jumlah_zonk`, `daftar_zonk` (dipisah koma), `dicatat_oleh`, `waktu`.
@@ -163,21 +165,22 @@ Satu endpoint Web App. Semua permintaan memakai **POST** dengan body JSON yang d
 
 Frontend mengirim: `{ "action": "...", "token": "...", "params": { } }`.
 
-| action               | Auth  | params                              | Hasil                                                                                                                                                       |
-| -------------------- | ----- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `login`              | -     | `user`, `password`                  | `token`, `user`, `role`, `wajibGantiPassword`                                                                                                               |
-| `changePassword`     | token | `passwordLama`, `passwordBaru`      | ok                                                                                                                                                          |
-| `getBootstrap`       | token | `bulan` (`yyyy-MM`)                 | daftar rumah aktif (no), jadwal sebulan (`tanggal`, `petugasJadwal`, `petugasAktual`, `ditukar`), tukar PENDING terkait pengguna, tanggal hari ini (server) |
-| `getDay`             | token | `tanggal`                           | petugas, berikutnya, titipan berakhir, ringkasan log jika ada                                                                                               |
-| `getInputForm`       | token | -                                   | daftar rumah dengan status malam ini (`normal` / `titip` + sisa hari); gagal `FORBIDDEN` jika bukan petugas/admin                                           |
-| `saveNight`          | token | `tanggal`, `items: [{no, nominal}]` | menyimpan Setoran + Jimpitan, mengembalikan teks rekap                                                                                                      |
-| `getRekap`           | token | `tanggal`                           | teks rekap dan data terstruktur                                                                                                                             |
-| `requestSwap`        | token | `tanggal1`, `mitra`                 | permintaan baru (server yang mencari `tanggal2`)                                                                                                            |
-| `respondSwap`        | token | `id`, `setuju` (bool)               | status baru                                                                                                                                                 |
-| `cancelSwap`         | token | `id`                                | status baru (pemohon untuk PENDING, admin untuk DISETUJUI)                                                                                                  |
-| `adminSetAktif`      | admin | `no`, `aktif` (bool)                | ok                                                                                                                                                          |
-| `adminAddHouse`      | admin | `no`, `nama`                        | ok (ditambahkan di akhir urutan; password awal dari pengaturan)                                                                                             |
-| `adminResetPassword` | admin | `no`                                | ok                                                                                                                                                          |
+| action                | Auth  | params                              | Hasil                                                                                                                                                       |
+| --------------------- | ----- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `login`               | -     | `user`, `password`                  | `token`, `user`, `role`, `wajibGantiPassword`                                                                                                               |
+| `changePassword`      | token | `passwordLama`, `passwordBaru`      | ok                                                                                                                                                          |
+| `getBootstrap`        | token | `bulan` (`yyyy-MM`)                 | daftar rumah aktif (no), jadwal sebulan (`tanggal`, `petugasJadwal`, `petugasAktual`, `ditukar`), tukar PENDING terkait pengguna, tanggal hari ini (server) |
+| `getDay`              | token | `tanggal`                           | petugas, berikutnya, titipan berakhir, ringkasan log jika ada                                                                                               |
+| `getInputForm`        | token | -                                   | daftar rumah dengan status malam ini (`normal` / `titip` + sisa hari); gagal `FORBIDDEN` jika bukan petugas/admin                                           |
+| `saveNight`           | token | `tanggal`, `items: [{no, nominal}]` | menyimpan Setoran + Jimpitan, mengembalikan teks rekap                                                                                                      |
+| `getRekap`            | token | `tanggal`                           | teks rekap dan data terstruktur                                                                                                                             |
+| `requestSwap`         | token | `tanggal1`, `mitra`                 | permintaan baru (server yang mencari `tanggal2`)                                                                                                            |
+| `respondSwap`         | token | `id`, `setuju` (bool)               | status baru                                                                                                                                                 |
+| `cancelSwap`          | token | `id`                                | status baru (pemohon untuk PENDING, admin untuk DISETUJUI)                                                                                                  |
+| `adminSetAktif`       | admin | `no`, `aktif` (bool)                | ok                                                                                                                                                          |
+| `adminAddHouse`       | admin | `no`, `nama`                        | ok (ditambahkan di akhir urutan; password awal dari pengaturan)                                                                                             |
+| `adminResetPassword`  | admin | `no`                                | ok                                                                                                                                                          |
+| `adminSetJadwalBulan` | admin | `bulan` (`yyyy-MM`), `petugasAwal`  | merilis jadwal untuk satu bulan                                                                                                                             |
 
 Kode error baku: `UNAUTHORIZED`, `FORBIDDEN`, `VALIDATION`, `CONFLICT`, `NOT_FOUND`, `SERVER`.
 

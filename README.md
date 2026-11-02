@@ -7,7 +7,7 @@ Dibangun dengan Vanilla HTML + CSS + JavaScript (ES Modules) tanpa build step un
 
 ## 🚀 Fitur Utama
 
-1. **Kalender Rotasi Otomatis**: Penjadwalan berputar otomatis berdasarkan master data nomor rumah yang aktif.
+1. **Jadwal Bulanan oleh Admin**: Admin merilis jadwal satu bulan dengan memilih petugas tanggal 1, lalu sistem mengisi rotasi harian berdasarkan rumah aktif.
 2. **Tukar Jadwal 2 Arah**: Warga dapat mengajukan tukar giliran ke rekan dengan persetujuan dua pihak.
 3. **Pencatatan Cepat Malam Hari**:
    - Hitungan hari otomatis (`>= 1000` = kelipatan hari, `< 1000` tapi `>= 500` = 1 hari).
@@ -40,6 +40,7 @@ Dibangun dengan Vanilla HTML + CSS + JavaScript (ES Modules) tanpa build step un
    - Execute as: **Me**.
    - Who has access: **Anyone**.
    - Salin Web App URL yang dihasilkan.
+7. Login sebagai `ADMIN`, buka bulan yang akan dijadwalkan, lalu pilih **Set Jadwal Bulan Ini**. Bulan lain tetap kosong sampai dirilis admin.
 
 ### 2. Frontend (GitHub Pages)
 
