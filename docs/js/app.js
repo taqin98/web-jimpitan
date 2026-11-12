@@ -24,7 +24,6 @@ const state = {
 
 // UI Element Selectors
 const screens = {
-  login: document.getElementById("screen-login"),
   changePassword: document.getElementById("screen-change-password"),
   calendar: document.getElementById("screen-calendar"),
   input: document.getElementById("screen-input"),
@@ -81,23 +80,23 @@ function switchScreen(screenName) {
   if (state.user) {
     if (userBadge) {
       userBadge.textContent = state.user;
-      userBadge.style.display = "inline-flex";
+      userBadge.hidden = false;
     }
     if (btnLogout) {
-      btnLogout.style.display = "inline-flex";
+      btnLogout.hidden = false;
     }
     if (btnAdmin) {
-      btnAdmin.style.display = state.role === "admin" ? "inline-flex" : "none";
+      btnAdmin.hidden = state.role !== "admin";
     }
   } else {
     if (userBadge) {
-      userBadge.style.display = "none";
+      userBadge.hidden = true;
     }
     if (btnLogout) {
-      btnLogout.style.display = "none";
+      btnLogout.hidden = true;
     }
     if (btnAdmin) {
-      btnAdmin.style.display = "none";
+      btnAdmin.hidden = true;
     }
   }
 }
@@ -828,7 +827,7 @@ function openRekapDirect(rekapText, targetDate) {
   const btnReinput = document.getElementById("btn-reinput");
   if (btnReinput) {
     const isToday = targetDate === state.today;
-    btnReinput.style.display = isToday ? "inline-flex" : "none";
+    btnReinput.hidden = !isToday;
   }
 
   switchScreen("rekap");
@@ -919,51 +918,6 @@ function renderAdminHouseList(houses) {
 // ==========================================
 
 function attachEventListeners() {
-  // Login Form
-  const formLogin = document.getElementById("form-login");
-  if (formLogin) {
-    formLogin.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const userInput = document.getElementById("login-user");
-      const passInput = document.getElementById("login-pass");
-
-      const userVal = userInput ? userInput.value.trim() : "";
-      const passVal = passInput ? passInput.value.trim() : "";
-
-      if (!userVal || !passVal) {
-        showToast("Nomor rumah dan password wajib diisi.", "error");
-        return;
-      }
-
-      showLoading("Sedang masuk...");
-      try {
-        const authData = await callApi("login", {
-          user: userVal,
-          password: passVal,
-        });
-
-        saveAuth(authData);
-        state.user = authData.user;
-        state.role = authData.role;
-        state.token = authData.token;
-        state.wajibGantiPassword = authData.wajibGantiPassword;
-
-        if (state.wajibGantiPassword) {
-          showToast("Silakan buat password baru sebelum melanjutkan.", "warning");
-          switchScreen("changePassword");
-        } else {
-          showToast(`Selamat datang, ${state.user}!`, "success");
-          switchScreen("calendar");
-          await loadCalendarBootstrap(state.currentYm, true);
-        }
-      } catch (err) {
-        showToast(err.message, "error");
-      } finally {
-        hideLoading();
-      }
-    });
-  }
-
   // Change Password Form
   const formChangePwd = document.getElementById("form-change-password");
   if (formChangePwd) {
@@ -990,6 +944,12 @@ function attachEventListeners() {
         });
         showToast("Password berhasil diganti!", "success");
         state.wajibGantiPassword = false;
+        saveAuth({
+          user: state.user,
+          role: state.role,
+          token: state.token,
+          wajibGantiPassword: false,
+        });
         switchScreen("calendar");
         await loadCalendarBootstrap(state.currentYm);
       } catch (err) {
@@ -1218,34 +1178,41 @@ function attachEventListeners() {
     btnLogout.addEventListener("click", () => {
       if (confirm("Apakah Anda yakin ingin keluar?")) {
         clearAuth();
-        state.user = null;
-        state.role = null;
-        state.token = null;
-        switchScreen("login");
-        showToast("Anda telah keluar.", "info");
+        window.location.replace("auth.html");
       }
     });
   }
 }
 
-// Initial App Boot
-document.addEventListener("DOMContentLoaded", async () => {
-  attachEventListeners();
-
+async function initializeApp() {
   const auth = getSavedAuth();
-  if (auth && auth.token) {
-    state.user = auth.user;
-    state.role = auth.role;
-    state.token = auth.token;
-    state.wajibGantiPassword = auth.wajibGantiPassword;
-
-    if (state.wajibGantiPassword) {
-      switchScreen("changePassword");
-    } else {
-      switchScreen("calendar");
-      await loadCalendarBootstrap(state.currentYm, true);
-    }
-  } else {
-    switchScreen("login");
+  if (!auth?.token) {
+    window.location.replace("auth.html");
+    return;
   }
-});
+
+  attachEventListeners();
+  state.user = auth.user;
+  state.role = auth.role;
+  state.token = auth.token;
+  state.wajibGantiPassword = auth.wajibGantiPassword;
+
+  const changePasswordUser = document.getElementById("change-password-user");
+  if (changePasswordUser) {
+    changePasswordUser.value = state.user;
+  }
+
+  if (state.wajibGantiPassword) {
+    switchScreen("changePassword");
+    return;
+  }
+
+  switchScreen("calendar");
+  await loadCalendarBootstrap(state.currentYm, true);
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initializeApp, { once: true });
+} else {
+  initializeApp();
+}

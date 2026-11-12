@@ -1,0 +1,39 @@
+<section id="screen-calendar" class="screen">
+  <div class="calendar-nav">
+    <button
+      id="btn-prev-month"
+      class="btn btn-secondary btn-sm"
+      type="button"
+      aria-label="Bulan sebelumnya"
+    >
+      &larr;
+    </button>
+    <div id="calendar-month-header" class="calendar-month-label"></div>
+    <button
+      id="btn-next-month"
+      class="btn btn-secondary btn-sm"
+      type="button"
+      aria-label="Bulan berikutnya"
+    >
+      &rarr;
+    </button>
+  </div>
+  <div id="calendar-grid" class="calendar-grid"></div>
+  <div class="calendar-legend">
+    <div class="legend-item"><span class="day-dot user-turn"></span><span>Giliran Anda</span></div>
+    <div class="legend-item">
+      <span class="day-dot other-turn"></span><span>Giliran Rekan</span>
+    </div>
+  </div>
+  <div id="pending-swaps-container"></div>
+  <div id="day-detail-card" class="card detail-card">
+    <div id="selected-date-title" class="card-title">Pilih Tanggal</div>
+    <div id="day-detail-content"></div>
+  </div>
+  <div class="bottom-bar">
+    <div id="start-turn-label" class="bottom-bar-label"></div>
+    <button id="btn-start-jimpitan" class="btn btn-primary btn-block" type="button" disabled>
+      Mulai Jimpitan Malam Ini
+    </button>
+  </div>
+</section>

@@ -1,0 +1,30 @@
+<section id="screen-admin" class="screen">
+  <div class="screen-heading">
+    <h1 class="screen-title">Master Data Rumah</h1>
+    <button id="btn-back-from-admin" class="btn btn-secondary btn-sm" type="button">Kembali</button>
+  </div>
+  <div class="card">
+    <div class="card-title">Tambah Rumah Baru</div>
+    <form id="form-add-house">
+      <div class="form-group">
+        <label for="new-house-no" class="form-label">Nomor Rumah</label>
+        <input
+          id="new-house-no"
+          type="text"
+          class="form-input"
+          placeholder="Contoh: A36"
+          autocapitalize="characters"
+          required
+        />
+      </div>
+      <div class="form-group">
+        <label for="new-house-name" class="form-label">Nama Kepala Keluarga (Opsional)</label>
+        <input id="new-house-name" type="text" class="form-input" placeholder="Contoh: Pak Joko" />
+      </div>
+      <button type="submit" class="btn btn-primary btn-block btn-sm">
+        Tambah ke Antrean Rotasi
+      </button>
+    </form>
+  </div>
+  <div id="admin-house-list"></div>
+</section>

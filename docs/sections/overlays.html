@@ -1,0 +1,75 @@
+<div
+  id="modal-swap"
+  class="modal-overlay"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="modal-swap-title"
+>
+  <div class="modal-card">
+    <div class="modal-header">
+      <div id="modal-swap-title" class="modal-title">Ajukan Tukar Jadwal</div>
+      <button
+        id="btn-close-swap-modal"
+        class="btn btn-secondary btn-sm"
+        type="button"
+        aria-label="Tutup"
+      >
+        &times;
+      </button>
+    </div>
+    <form id="form-swap">
+      <div class="form-group">
+        <label for="swap-date-display" class="form-label">Giliran Anda</label
+        ><input id="swap-date-display" type="text" class="form-input" readonly />
+      </div>
+      <div class="form-group">
+        <label for="swap-mitra-select" class="form-label">Ajak Tukar Dengan Rekan</label
+        ><select id="swap-mitra-select" class="form-input" required></select>
+      </div>
+      <p class="form-help">
+        Sistem otomatis mencari giliran rekan terdekat setelah tanggal giliran Anda.
+      </p>
+      <button type="submit" class="btn btn-primary btn-block">Kirim Permintaan Tukar</button>
+    </form>
+  </div>
+</div>
+<div
+  id="modal-set-jadwal-bulan"
+  class="modal-overlay"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="modal-schedule-title"
+>
+  <div class="modal-card">
+    <div class="modal-header">
+      <div id="modal-schedule-title" class="modal-title">Set Jadwal Bulanan</div>
+      <button
+        id="btn-close-set-jadwal-modal"
+        class="btn btn-secondary btn-sm"
+        type="button"
+        aria-label="Tutup"
+      >
+        &times;
+      </button>
+    </div>
+    <form id="form-set-jadwal-bulan">
+      <div class="form-group">
+        <label for="set-jadwal-bulan-display" class="form-label">Bulan</label
+        ><input id="set-jadwal-bulan-display" type="text" class="form-input" readonly />
+      </div>
+      <div class="form-group">
+        <label for="set-jadwal-petugas-awal" class="form-label">Petugas Tanggal 1</label
+        ><select id="set-jadwal-petugas-awal" class="form-input" required></select>
+      </div>
+      <p class="form-help">
+        Rotasi akan bergulir otomatis per malam dimulai dari nomor rumah ini hingga akhir bulan.
+      </p>
+      <button type="submit" class="btn btn-primary btn-block">Rilis & Aktifkan Jadwal</button>
+    </form>
+  </div>
+</div>
+<div id="toast-container" class="toast-container" aria-live="polite"></div>
+<div id="loading-overlay" class="loading-overlay" role="status" aria-live="polite">
+  <div class="spinner"></div>
+  <div id="loading-text" class="loading-text">Memuat...</div>
+</div>
