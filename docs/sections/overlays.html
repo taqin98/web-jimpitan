@@ -68,6 +68,32 @@
     </form>
   </div>
 </div>
+<div
+  id="modal-logout"
+  class="modal-overlay"
+  role="dialog"
+  aria-modal="true"
+  aria-hidden="true"
+  aria-labelledby="modal-logout-title"
+  aria-describedby="modal-logout-description"
+>
+  <div class="modal-card modal-confirmation">
+    <div class="modal-confirmation-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24">
+        <path d="M9 6H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4" />
+        <path d="m16 17 5-5-5-5M21 12H9" />
+      </svg>
+    </div>
+    <h2 id="modal-logout-title" class="modal-confirmation-title">Keluar dari akun?</h2>
+    <p id="modal-logout-description" class="modal-confirmation-description">
+      Anda perlu memasukkan nomor rumah dan password lagi untuk kembali menggunakan aplikasi.
+    </p>
+    <div class="modal-actions">
+      <button id="btn-cancel-logout" class="btn btn-secondary" type="button">Batal</button>
+      <button id="btn-confirm-logout" class="btn btn-danger" type="button">Ya, Keluar</button>
+    </div>
+  </div>
+</div>
 <div id="toast-container" class="toast-container" aria-live="polite"></div>
 <div id="loading-overlay" class="loading-overlay" role="status" aria-live="polite">
   <div class="spinner"></div>

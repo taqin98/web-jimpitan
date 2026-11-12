@@ -34,6 +34,7 @@ const screens = {
 const loadingOverlay = document.getElementById("loading-overlay");
 const loadingText = document.getElementById("loading-text");
 const toastContainer = document.getElementById("toast-container");
+let logoutTrigger = null;
 
 export function showLoading(msg = "Memuat...") {
   if (loadingText) {
@@ -699,6 +700,36 @@ function closeSwapModal() {
   }
 }
 
+function openLogoutModal() {
+  const modal = document.getElementById("modal-logout");
+  const cancelButton = document.getElementById("btn-cancel-logout");
+
+  if (!modal) {
+    return;
+  }
+
+  logoutTrigger = document.activeElement;
+  modal.classList.add("active");
+  modal.setAttribute("aria-hidden", "false");
+  cancelButton?.focus();
+}
+
+function closeLogoutModal() {
+  const modal = document.getElementById("modal-logout");
+
+  if (!modal) {
+    return;
+  }
+
+  modal.classList.remove("active");
+  modal.setAttribute("aria-hidden", "true");
+
+  if (logoutTrigger instanceof HTMLElement) {
+    logoutTrigger.focus();
+  }
+  logoutTrigger = null;
+}
+
 async function handleRespondSwap(swapId, setuju) {
   showLoading(setuju ? "Menyetujui tukar..." : "Menolak tukar...");
   try {
@@ -1175,13 +1206,28 @@ function attachEventListeners() {
   // Logout Button
   const btnLogout = document.getElementById("btn-logout");
   if (btnLogout) {
-    btnLogout.addEventListener("click", () => {
-      if (confirm("Apakah Anda yakin ingin keluar?")) {
-        clearAuth();
-        window.location.replace("auth.html");
-      }
-    });
+    btnLogout.addEventListener("click", openLogoutModal);
   }
+
+  const modalLogout = document.getElementById("modal-logout");
+  const btnCancelLogout = document.getElementById("btn-cancel-logout");
+  const btnConfirmLogout = document.getElementById("btn-confirm-logout");
+
+  btnCancelLogout?.addEventListener("click", closeLogoutModal);
+  btnConfirmLogout?.addEventListener("click", () => {
+    clearAuth();
+    window.location.replace("auth.html");
+  });
+  modalLogout?.addEventListener("click", (event) => {
+    if (event.target === modalLogout) {
+      closeLogoutModal();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && modalLogout?.classList.contains("active")) {
+      closeLogoutModal();
+    }
+  });
 }
 
 async function initializeApp() {
